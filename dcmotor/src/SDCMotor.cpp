@@ -31,7 +31,9 @@ static void mdlInitializeSizes(SimStruct *S)
     if (!ssSetNumInputPorts(S, 1)) return;
 	ssSetInputPortWidth(S,0,1);
 	//ssSetInputPortDirectFeedThrough(S,0,0);		// Existen llamadas de la entrada en la funcion mdlOutputs
-	ssSetInputPortRequiredContiguous(S,0,1);	// sacado del ejemplo (?)
+	
+	// Specify that the elements of its input signals must occupy contiguous areas of memory
+	ssSetInputPortRequiredContiguous(S,0,1);
     
     if (!ssSetNumOutputPorts(S, 1)) return;
     ssSetOutputPortWidth(S, 0, 1);	// moya
