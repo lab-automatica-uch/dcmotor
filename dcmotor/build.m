@@ -1,0 +1,1 @@
+mex -lWSock32 -Iinclude src/SDCMotor.cpp src/opto22snap.cpp

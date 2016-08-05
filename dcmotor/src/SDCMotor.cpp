@@ -7,9 +7,10 @@ extern "C" {
 #include "simstruc.h"
 #include "O22SIOMM.h"
 
-/*====================*
- * S-function methods *
- *====================*/
+#define WORK_INT_N 1
+#define WORK_INT_ERROR_COUNT 0
+
+#define MAX_ERROR_COUNT 5
 
 
 /* Function: mdlInitializeSizes ===============================================
@@ -40,9 +41,9 @@ static void mdlInitializeSizes(SimStruct *S)
 
     ssSetNumSampleTimes(S, 1);
     ssSetNumRWork(S, 0);			// reserve element in the float vector
-    ssSetNumIWork(S, 0);			// reserve element in the int vector
+    ssSetNumIWork(S, WORK_INT_N);			// reserve element in the int vector (error count)
     ssSetNumPWork(S, 1);			// reserve element in the pointers vector
-    ssSetNumModes(S, 0);			// to store a C++ object
+    ssSetNumModes(S, 0);			// to store a C++ object (OPTO 22 interface)
     ssSetNumNonsampledZCs(S, 0);	// number of states for which a block detects zero crossings
 
     ssSetOptions(S, 0);				// set the simulation options that this block implements
@@ -76,27 +77,26 @@ static void mdlStart(SimStruct *S)
 
 	Brain = new O22SnapIoMemMap();
 	nResult = Brain->OpenEnet("192.168.6.101", 2001, 10000, 1);
-	//mexPrintf("openenet: %d\n",nResult);
 
 	if ( nResult == SIOMM_OK )
 	{
 		nResult = Brain->IsOpenDone();
-		//mexPrintf("	isopendone: %d\n",nResult);
 		while ( nResult == SIOMM_ERROR_NOT_CONNECTED_YET )
 		{
 			nResult = Brain->IsOpenDone();
-			//mexPrintf("  isopendone: %d\n",nResult);
 		} 
 	}
 
 	// Check for error on OpenEnet() and IsOpenDone()
 	if ( nResult != SIOMM_OK )
 	{
-		ssSetErrorStatus(S,"No se pudo realizar la conexion con exito.");
+		ssSetErrorStatus(S,"Unable to connect to OPTO22 (192.168.6.101).");
 		return;
 	}
-
+    // Set OPTO22
 	ssGetPWork(S)[0] = (void *) Brain;
+    // Error count
+    ssGetIWork(S)[WORK_INT_ERROR_COUNT] = 0;
 }
 #endif /*  MDL_START */
 
@@ -110,18 +110,30 @@ static void mdlUpdate(SimStruct *S, int_T tid)
 {
 	O22SnapIoMemMap *Brain;
 	long nResult;
-
+    // Get work pointers
+    int_T* IWorkPtr = ssGetIWork(S);
 	Brain = (O22SnapIoMemMap *) ssGetPWork(S)[0];
-
+    // Read data from Simulink
 	const real_T *u = ssGetInputPortRealSignal(S,0);
-
+    // Send data to OPTO22
     nResult=Brain->SetAnaPtValue(0,(float)*u);
-	if ( nResult != SIOMM_OK )
+	// Check result
+    if ( nResult != SIOMM_OK )
 	{
-		//mexPrintf("setanaptvalue: %d\n",nResult);
-		ssSetErrorStatus(S,"Error al transmitir el dato de voltaje.");
-		return;
-	}
+		ssPrintf("Error sending voltage command.\n");
+        IWorkPtr[WORK_INT_ERROR_COUNT]++;
+        // Check error count
+        if (IWorkPtr[WORK_INT_ERROR_COUNT] > MAX_ERROR_COUNT)
+        {
+            ssSetErrorStatus(S, "Max error count reached.");
+            return;
+        }
+    }
+    else
+    {
+        // Restore value
+        IWorkPtr[WORK_INT_ERROR_COUNT] = 0;
+    }
 }
 
 
@@ -135,7 +147,8 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 	O22SnapIoMemMap *Brain;
 	float velocidad;
 	long nResult;
-
+    // Get work pointers
+    int_T* IWorkPtr = ssGetIWork(S);
 	Brain = (O22SnapIoMemMap *) ssGetPWork(S)[0];
 
 	real_T *y = ssGetOutputPortRealSignal(S,0);
@@ -143,9 +156,19 @@ static void mdlOutputs(SimStruct *S, int_T tid)
 	nResult=Brain->GetAnaPtValue(4,&velocidad);
 	if ( nResult != SIOMM_OK )
 	{
-		//mexPrintf("getanaptvalue: %d\n",nResult);
-		ssSetErrorStatus(S,"Error al recibir el dato de velocidad.");
-		return;
+		ssPrintf("Error receiving speed data.\n");
+        IWorkPtr[WORK_INT_ERROR_COUNT]++;
+        // Check error count
+        if (IWorkPtr[WORK_INT_ERROR_COUNT] > MAX_ERROR_COUNT)
+        {
+            ssSetErrorStatus(S, "Max error count reached.");
+            return;
+        }
+        else
+        {
+            // Restore value
+            IWorkPtr[WORK_INT_ERROR_COUNT] = 0;
+        }
 	}
 
     y[0] = (real_T)velocidad;
