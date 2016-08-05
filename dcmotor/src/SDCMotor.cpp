@@ -129,11 +129,6 @@ static void mdlUpdate(SimStruct *S, int_T tid)
             return;
         }
     }
-    else
-    {
-        // Restore value
-        IWorkPtr[WORK_INT_ERROR_COUNT] = 0;
-    }
 }
 
 
@@ -163,11 +158,6 @@ static void mdlOutputs(SimStruct *S, int_T tid)
         {
             ssSetErrorStatus(S, "Max error count reached.");
             return;
-        }
-        else
-        {
-            // Restore value
-            IWorkPtr[WORK_INT_ERROR_COUNT] = 0;
         }
 	}
 
